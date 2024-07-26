@@ -5,7 +5,7 @@ Reworked version of [Trentonom0r3/Ezsynth](https://github.com/Trentonom0r3/Ezsyn
 > Perform things like style transfer, color transfer, inpainting, superimposition, video stylization and more!
 This implementation makes use of advanced physics based edge detection and RAFT optical flow, which leads to more accurate results during synthesis.
 
-**Note: This is not intended to be used as an installable module.**
+:warning: **This is not intended to be used as an installable module.**
 
 Currently tested on:
 - `Windows 10 - Python 3.11 - RTX3060`
