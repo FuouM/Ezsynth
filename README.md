@@ -2,33 +2,42 @@
 
 Reworked version of [Trentonom0r3/Ezsynth](https://github.com/Trentonom0r3/Ezsynth), with masking support and some visual bug fixes. Aims to be easy to use and maintain. 
 
-**Examples:**
-* To get started, see `test_redux.py` for an example of generating a full video.
-* To generate image style transfer, see `test_imgsynth.py` for all examples from the original `Ebsynth`.
-
-**Get started:**
-
-1. git clone the repo
-2. Place the `Ezsynth/ezsynth/utils/ebsynth.dll` file
-3. Run script from your Python environment
-
-**Note: This is not intended to be used as an installable module.**
-
-Currently only tested on `Windows 10 - Python 3.11 - RTX3060`
-
 > Perform things like style transfer, color transfer, inpainting, superimposition, video stylization and more!
 This implementation makes use of advanced physics based edge detection and RAFT optical flow, which leads to more accurate results during synthesis.
 
-> Ezsynth uses [Trentonom0r3/ebsynth](https://github.com/Trentonom0r3/ebsynth) - library version of Ebsynth.
+**Note: This is not intended to be used as an installable module.**
 
-## Building ebsynth.dll (Windows)
+Currently tested on:
+- `Windows 10 - Python 3.11 - RTX3060`
+- `Ubuntu 24 - Python 3.12 - RTX4070(Laptop)`
+
+## Building ebsynth lib
+
+### Windows
 
 1. Git clone [jamriska/ebsynth](https://github.com/jamriska/ebsynth)
 2. Copy `new_build-win65-cpu+cuda.bat` to `ebsynth`
 3. Run the `.bat` inside `ebsynth/`
 4. Copy `bin/ebsynth.dll` to `Ezsynth/ezsynth/utils/ebsynth.dll`
 
-A pre-compiled `ebsynth.dll` is included in the repository. VirusTotal results: https://www.virustotal.com/gui/file/cc58f41d0e43a6050849b02d36ccc2e29a4f17dfbbcacbd92fdd26cb3780c0ee/detection
+### Linux
+```bash
+cd path/to/Ezsynth
+# clone ebsynth
+git clone https://github.com/jamriska/ebsynth.git
+# build lib
+cp ./build_ebs-linux-cpu+cuda.sh ./ebsynth/
+cd ebsynth && ./build_ebs-linux-cpu+cuda.sh
+# copy lib
+cp ./bin/ebsynth.so ../ezsynth/utils/ebsynth.so
+# cleanup
+cd .. && rm -rf ./ebsynth
+```
+
+## Examples
+
+* To get started, see `test_redux.py` for an example of generating a full video.
+* To generate image style transfer, see `test_imgsynth.py` for all examples from the original `Ebsynth`.
 
 ## Example outputs
 
@@ -36,10 +45,7 @@ A pre-compiled `ebsynth.dll` is included in the repository. VirusTotal results: 
 |:-:|:-:|:-:|
 | <img src="output_synth/facestyle_out.png" height="250"> | <img src="output_synth/stylit_out.png" height="250"> | <img src="output_synth/retarget_out.png" height="250"> |
 
-
-
 https://github.com/user-attachments/assets/aa3cd191-4eb2-4dc0-8213-2c763f1b3316
-
 
 
 ## API Overview
