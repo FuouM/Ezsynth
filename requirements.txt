@@ -1,0 +1,6 @@
+torch
+opencv-python
+tqdm
+phycv
+scipy
+cupy
