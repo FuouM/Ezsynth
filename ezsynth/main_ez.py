@@ -2,30 +2,30 @@ import time
 
 import numpy as np
 
-from ezsynth.aux_classes import RunConfig
-from ezsynth.aux_computations import precompute_edge_guides
-from ezsynth.aux_masker import (
+from .aux_classes import RunConfig
+from .aux_computations import precompute_edge_guides
+from .aux_masker import (
     apply_masked_back_seq,
     apply_masks,
     apply_masks_idxes,
 )
-from ezsynth.aux_run import run_scratch
-from ezsynth.aux_utils import (
+from .aux_run import run_scratch
+from .aux_utils import (
     setup_masks_from_folder,
     setup_src_from_folder,
     setup_src_from_lst,
     validate_and_read_img,
     validate_option,
 )
-from ezsynth.constants import (
+from .constants import (
     DEFAULT_EDGE_METHOD,
     DEFAULT_FLOW_MODEL,
     EDGE_METHODS,
     FLOW_MODELS,
 )
-from ezsynth.utils._ebsynth import ebsynth
-from ezsynth.utils.flow_utils.OpticalFlow import RAFT_flow
-from ezsynth.sequences import EasySequence, SequenceManager
+from .utils._ebsynth import ebsynth
+from .utils.flow_utils.OpticalFlow import RAFT_flow
+from .sequences import EasySequence, SequenceManager
 
 
 class EzsynthBase:
@@ -112,6 +112,7 @@ class EzsynthBase:
         no_skip_rev = False
 
         stylized_frames = []
+        err_frames = []
 
         img_seq = (
             self.masked_frs_seq
@@ -134,7 +135,7 @@ class EzsynthBase:
                 seq.fr_start_idx += 1
                 no_skip_rev = True
 
-            tmp_stylized_frames, _ = run_scratch(
+            tmp_stylized_frames, tmp_err_frames = run_scratch(
                 seq,
                 img_seq,
                 stl_seq,
@@ -146,10 +147,12 @@ class EzsynthBase:
 
             if self._should_remove_first_fr(i, no_skip_rev):
                 tmp_stylized_frames.pop(0)
+                tmp_err_frames.pop(0)
 
             no_skip_rev = False
 
             stylized_frames.extend(tmp_stylized_frames)
+            err_frames.extend(tmp_err_frames)
 
         print(f"Run took: {time.time() - st:.4f} s")
 
@@ -158,7 +161,7 @@ class EzsynthBase:
                 self.img_frs_seq, stylized_frames, self.msk_frs_seq, self.cfg.feather
             )
 
-        return stylized_frames
+        return stylized_frames, err_frames
 
     def _should_skip_blend_style_last(self, i: int) -> bool:
         if (
@@ -224,7 +227,31 @@ class Ezsynth(EzsynthBase):
         )
 
 
-class ImageSynth:
+class ImageSynthBase:
+    def __init__(
+        self,
+        style_img: np.ndarray,
+        src_img: np.ndarray,
+        tgt_img: np.ndarray,
+        cfg: RunConfig = RunConfig(),
+    ) -> None:
+        self.style_img = style_img
+        self.src_img = src_img
+        self.tgt_img = tgt_img
+        self.cfg = cfg
+
+        st = time.time()
+
+        self.eb = ebsynth(**cfg.get_ebsynth_cfg())
+        self.eb.runner.initialize_libebsynth()
+
+        print(f"Init ImageSynth took: {time.time() - st:.4f} s")
+
+    def run(self, guides: list[tuple[np.ndarray, np.ndarray, float]] = []):
+        guides.append((self.src_img, self.tgt_img, self.cfg.img_wgt))
+        return self.eb.run(self.style_img, guides=guides)
+
+class ImageSynth(ImageSynthBase):
     def __init__(
         self,
         style_path: str,
@@ -232,14 +259,8 @@ class ImageSynth:
         tgt_path: str,
         cfg: RunConfig = RunConfig(),
     ) -> None:
-        self.style_img = validate_and_read_img(style_path)
-        self.src_img = validate_and_read_img(src_path)
-        self.tgt_img = validate_and_read_img(tgt_path)
-        self.cfg = cfg
-
-        self.eb = ebsynth(**cfg.get_ebsynth_cfg())
-        self.eb.runner.initialize_libebsynth()
-
-    def run(self, guides: list[tuple[np.ndarray, np.ndarray, float]] = []):
-        guides.append((self.src_img, self.tgt_img, self.cfg.img_wgt))
-        return self.eb.run(self.style_img, guides=guides)
+        style_img = validate_and_read_img(style_path)
+        src_img = validate_and_read_img(src_path)
+        tgt_img = validate_and_read_img(tgt_path)
+        
+        super().__init__(style_img, src_img, tgt_img, cfg)

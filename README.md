@@ -15,7 +15,7 @@ Currently tested on:
 
 ### Windows
 
-1. Git clone [jamriska/ebsynth](https://github.com/jamriska/ebsynth)
+1. Git clone [Trentonom0r3/ebsynth](https://github.com/Trentonom0r3/ebsynth)
 2. Copy `build_ebs-win64-cpu+cuda.bat` to `ebsynth`
 3. Run the `.bat` inside `ebsynth/`
 4. Copy `bin/ebsynth.dll` to `Ezsynth/ezsynth/utils/ebsynth.dll`
@@ -47,6 +47,16 @@ cd .. && rm -rf ./ebsynth
 
 https://github.com/user-attachments/assets/aa3cd191-4eb2-4dc0-8213-2c763f1b3316
 
+## Notable things
+
+**Changes:**
+1. Flow is calculated on a frame by frame basis, with correct time orientation, instead of pre-computing only a forward-flow.
+2. Padding is applied to Edge detection and Warping to remove border visual distortion.
+
+
+**Observations:**
+1. Edge detection models return NaN if input tensor has too many zeros(?).
+2. Pre-masked inputs take twice as long to run Ebsynth
 
 ## API Overview
 
