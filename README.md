@@ -2,6 +2,9 @@
 
 Reworked version of [Trentonom0r3/Ezsynth](https://github.com/Trentonom0r3/Ezsynth), with masking support and some visual bug fixes. Aims to be easy to use and maintain. 
 
+Perform things like style transfer, color transfer, inpainting, superimposition, video stylization and more!
+This implementation makes use of advanced physics based edge detection and RAFT optical flow, which leads to more accurate results during synthesis.
+
 **Examples:**
 * To get started, see `test_redux.py` for an example of generating a full video.
 * To generate image style transfer, see `test_imgsynth.py` for all examples from the original `Ebsynth`.
@@ -15,12 +18,7 @@ Reworked version of [Trentonom0r3/Ezsynth](https://github.com/Trentonom0r3/Ezsyn
 
 You may also install Cupy and Cupyx to use GPU for some other operations.
 
-**Note: This is not intended to be used as an installable module.**
 
-Currently only tested on `Windows 10 - Python 3.11 - RTX3060`
-
-> Perform things like style transfer, color transfer, inpainting, superimposition, video stylization and more!
-This implementation makes use of advanced physics based edge detection and RAFT optical flow, which leads to more accurate results during synthesis.
 
 :warning: **This is not intended to be used as an installable module.**
 
@@ -41,7 +39,7 @@ Currently tested on:
 ```bash
 cd path/to/Ezsynth
 # clone ebsynth
-git clone https://github.com/jamriska/ebsynth.git
+git clone https://github.com/Trentonom0r3/ebsynth.git
 # build lib
 cp ./build_ebs-linux-cpu+cuda.sh ./ebsynth/
 cd ebsynth && ./build_ebs-linux-cpu+cuda.sh
