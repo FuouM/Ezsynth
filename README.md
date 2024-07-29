@@ -5,49 +5,72 @@ Reworked version of [Trentonom0r3/Ezsynth](https://github.com/Trentonom0r3/Ezsyn
 Perform things like style transfer, color transfer, inpainting, superimposition, video stylization and more!
 This implementation makes use of advanced physics based edge detection and RAFT optical flow, which leads to more accurate results during synthesis.
 
-**Examples:**
-* To get started, see `test_redux.py` for an example of generating a full video.
-* To generate image style transfer, see `test_imgsynth.py` for all examples from the original `Ebsynth`.
-
-**Get started:**
-
-1. git clone the repo
-2. Install dependencies `pip install -r requirements`
-3. Place the `Ezsynth/ezsynth/utils/ebsynth.dll` file
-4. Run script from your Python environment
-
-You may also install Cupy and Cupyx to use GPU for some other operations.
-
-
-
 :warning: **This is not intended to be used as an installable module.**
 
 Currently tested on:
-- `Windows 10 - Python 3.11 - RTX3060`
-- `Ubuntu 24 - Python 3.12 - RTX4070(Laptop)`
+```
+Windows 10 - Python 3.11 - RTX3060
+Ubuntu 24 - Python 3.12 - RTX4070(Laptop)
+```
 
-## Building ebsynth lib
+## Get started
 
 ### Windows
+```cmd
+rem clone this repo
+git clone https://github.com/FuouM/Ezsynth.git 
+cd Ezsynth
 
-1. Git clone [Trentonom0r3/ebsynth](https://github.com/Trentonom0r3/ebsynth)
-2. Copy `build_ebs-win64-cpu+cuda.bat` to `ebsynth`
-3. Run the `.bat` inside `ebsynth/`
-4. Copy `bin/ebsynth.dll` to `Ezsynth/ezsynth/utils/ebsynth.dll`
+rem (optional) create and activate venv
+python -m venv venv
+venv\Scripts\activate.bat
+
+rem install requirements
+pip install -r requirements.txt
+
+rem clone ebsynth
+git clone https://github.com/Trentonom0r3/ebsynth.git
+
+rem build ebsynth as lib
+copy .\build_ebs-win64-cpu+cuda.bat .\ebsynth
+cd ebsynth && .\build_ebs-win64-cpu+cuda.bat
+
+rem copy lib
+cp .\bin\ebsynth.so ..\ezsynth\utils\ebsynth.so
+
+rem cleanup
+cd .. && rmdir /s /q .\ebsynth
+```
 
 ### Linux
 ```bash
-cd path/to/Ezsynth
+# clone this repo
+git clone https://github.com/FuouM/Ezsynth.git 
+cd Ezsynth
+
+# (optional) create and activate venv
+python -m venv venv
+source ./venv/bin/activate
+
+# install requirements
+pip install -r requirements.txt
+
 # clone ebsynth
 git clone https://github.com/Trentonom0r3/ebsynth.git
-# build lib
-cp ./build_ebs-linux-cpu+cuda.sh ./ebsynth/
+
+# build ebsynth as lib
+cp ./build_ebs-linux-cpu+cuda.sh ./ebsynth
 cd ebsynth && ./build_ebs-linux-cpu+cuda.sh
+
 # copy lib
 cp ./bin/ebsynth.so ../ezsynth/utils/ebsynth.so
+
 # cleanup
 cd .. && rm -rf ./ebsynth
 ```
+
+### All
+You may also install Cupy and Cupyx to use GPU for some other operations.
 
 ## Examples
 
@@ -108,12 +131,14 @@ save_to_folder(output_folder, "stylit_err.png", result[1]) # Error image
 
 **edge_method**
 
-Edge detection method. Choose from 'PST', 'Classic', or 'PAGE'.
-* PST (Phase Stretch Transform): Good overall structure, but not very detailed.
-* Classic: A good balance between structure and detail.
-* PAGE (Phase and Gradient Estimation): Great detail, great structure, but slow.
+Edge detection method. Choose from `PST`, `Classic`, or `PAGE`.
+* `PST` (Phase Stretch Transform): Good overall structure, but not very detailed.
+* `Classic`: A good balance between structure and detail.
+* `PAGE` (Phase and Gradient Estimation): Great detail, great structure, but slow.
 
-**video stylization**. Via file paths: `test_redux.py`
+**video stylization**
+
+Via file paths (see `test_redux.py`):
 
 ```python
 style_paths = [
@@ -137,7 +162,7 @@ stylized_frames, err_frames  = ezrunner.run_sequences(only_mode)
 save_seq(stylized_frames, "output")
 ```
 
-Via Numpy ndarrays
+Via Numpy ndarrays:
 
 ```python
 class EzsynthBase:
