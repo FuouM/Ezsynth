@@ -1,6 +1,8 @@
-torch
+numpy
 opencv-python
-tqdm
+torch
+torchvision
 phycv
 scipy
-cupy
+Pillow
+tqdm

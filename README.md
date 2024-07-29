@@ -2,6 +2,23 @@
 
 Reworked version of [Trentonom0r3/Ezsynth](https://github.com/Trentonom0r3/Ezsynth), with masking support and some visual bug fixes. Aims to be easy to use and maintain. 
 
+**Examples:**
+* To get started, see `test_redux.py` for an example of generating a full video.
+* To generate image style transfer, see `test_imgsynth.py` for all examples from the original `Ebsynth`.
+
+**Get started:**
+
+1. git clone the repo
+2. Install dependencies `pip install -r requirements`
+3. Place the `Ezsynth/ezsynth/utils/ebsynth.dll` file
+4. Run script from your Python environment
+
+You may also install Cupy and Cupyx to use GPU for some other operations.
+
+**Note: This is not intended to be used as an installable module.**
+
+Currently only tested on `Windows 10 - Python 3.11 - RTX3060`
+
 > Perform things like style transfer, color transfer, inpainting, superimposition, video stylization and more!
 This implementation makes use of advanced physics based edge detection and RAFT optical flow, which leads to more accurate results during synthesis.
 
@@ -91,7 +108,14 @@ save_to_folder(output_folder, "stylit_err.png", result[1]) # Error image
 
 ### Ezsynth
 
-video stylization. Via file paths: `test_redux.py`
+**edge_method**
+
+Edge detection method. Choose from 'PST', 'Classic', or 'PAGE'.
+* PST (Phase Stretch Transform): Good overall structure, but not very detailed.
+* Classic: A good balance between structure and detail.
+* PAGE (Phase and Gradient Estimation): Great detail, great structure, but slow.
+
+**video stylization**. Via file paths: `test_redux.py`
 
 ```python
 style_paths = [
@@ -110,7 +134,7 @@ ezrunner = Ezsynth(
 )
 
 only_mode = None
-stylized_frames = ezrunner.run_sequences(only_mode)
+stylized_frames, err_frames  = ezrunner.run_sequences(only_mode)
 
 save_seq(stylized_frames, "output")
 ```
@@ -172,9 +196,7 @@ class EzsynthBase:
 * `do_mask (bool)`: Whether to apply mask. Defaults to `False`.
  
 * `pre_mask (bool)`: Whether to mask the inputs and styles before `RUN` or after. Pre-mask takes ~2x time to run per frame. Could be due to Ebsynth.dll implementation. Defaults to `False`.     
- 
-* `return_masked_only (bool)`: Whether to return the styled results without applying it back to the original image. Defaults to `False`.     
- 
+  
 * `feather (int)`: Feather Gaussian radius to apply on the mask results. Only affect if `return_masked_only == False`. Expects integers. Defaults to `0`.
 
 ## Credits
