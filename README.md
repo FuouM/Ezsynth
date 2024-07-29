@@ -17,18 +17,21 @@ Ubuntu 24 - Python 3.12 - RTX4070(Laptop)
 
 ### Windows
 ```cmd
-rem clone this repo
+rem Clone this repo
 git clone https://github.com/FuouM/Ezsynth.git 
 cd Ezsynth
 
-rem (optional) create and activate venv
+rem (Optional) create and activate venv
 python -m venv venv
 venv\Scripts\activate.bat
 
-rem install requirements
+rem Install requirements
 pip install -r requirements.txt
 
-rem clone ebsynth
+rem A precompiled ebsynth.dll is included. 
+rem If don't want to rebuild, you are ready to go and can skip the following steps.  
+
+rem Clone ebsynth
 git clone https://github.com/Trentonom0r3/ebsynth.git
 
 rem build ebsynth as lib
