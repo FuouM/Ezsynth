@@ -77,7 +77,7 @@ def deflicker(
         resy=resy,
         larger_dim=larger_dim,
         device=device,
-        pretrain_iters=cfg['pretrain_iter_number'],
+        pretrain_iters=cfg["pretrain_iter_number"],
     )
 
     model_F_atlas.train()
@@ -86,17 +86,13 @@ def deflicker(
     jif_all = get_tuples(num_frames, frames)
 
     loss_val = 0.0
-
+    global_rigidity_coeff_fg = cfg["global_rigidity_coeff_fg"]
     # Start training!
     for i in (pbar := tqdm.tqdm(range(start_iteration, iters_num))):
-        pbar.set_description(
-            f"Training reconstruct model. Last loss: {loss_val:.3f}"
-        )
+        pbar.set_description(f"Training reconstruct model. Last loss: {loss_val:.3f}")
         if i > cfg["stop_global_rigidity"]:
             global_rigidity_coeff_fg = 0
-        else:
-            global_rigidity_coeff_fg = cfg['global_rigidity_coeff_fg']
-
+            
         # randomly choose indices for the current batch
         inds_foreground = torch.randint(
             jif_all.shape[1], (np.int64(cfg["samples_batch"] * 1.0), 1)
@@ -132,26 +128,25 @@ def deflicker(
         # Reconstruct final colors from the two layers (using alpha)
         rgb_output_foreground = rgb_output1
 
-        # if cfg["use_gradient_loss"]:
-        #     gradient_loss = get_gradient_loss_single(
-        #         frames_dx,
-        #         frames_dy,
-        #         jif_current,
-        #         model_F_mapping1,
-        #         model_F_atlas,
-        #         rgb_output_foreground,
-        #         device,
-        #         resx,
-        #         num_frames,
-        #     )
-        # else:
-        #     gradient_loss = 0.0
-        
-        gradient_loss = 0.0 
-        
-        rgb_loss = (
-            torch.norm(rgb_output_foreground - rgb_current, dim=1) ** 2
-        ).mean()
+        if cfg["use_gradient_loss"]:
+            gradient_loss = get_gradient_loss_single(
+                frames_dx,
+                frames_dy,
+                jif_current,
+                model_F_mapping1,
+                model_F_atlas,
+                rgb_output_foreground,
+                device,
+                resx,
+                num_frames,
+            )
+        else:
+            gradient_loss = 0.0
+
+        # gradient_loss = 0.0
+
+        rgb_loss = (torch.norm(rgb_output_foreground - rgb_current, dim=1) ** 2).mean()
+        # print(f"{rgb_loss=}")
 
         rigidity_loss1 = get_rigidity_loss(
             jif_current,
@@ -176,23 +171,23 @@ def deflicker(
                 uv_mapping_scale=cfg["uv_mapping_scale"],
             )
 
-        # flow_loss1 = get_optical_flow_loss(
-        #     jif_current,
-        #     uv_foreground1,
-        #     flow_fwds,
-        #     flow_bwds,
-        #     larger_dim,
-        #     num_frames,
-        #     model_F_mapping1,
-        #     mask_fwds,
-        #     mask_bwds,
-        #     cfg["uv_mapping_scale"],
-        #     device,
-        #     use_alpha=True,
-        #     alpha=alpha,
-        # )
-        
-        flow_loss1 = 0
+        flow_loss1 = get_optical_flow_loss(
+            jif_current,
+            uv_foreground1,
+            flow_bwds,
+            mask_bwds,
+            resx,
+            num_frames,
+            model_F_mapping1,
+            flow_fwds,
+            mask_fwds,
+            cfg["uv_mapping_scale"],
+            device,
+            use_alpha=True,
+            alpha=alpha,
+        )
+
+        # flow_loss1 = 0
 
         if cfg["include_global_rigidity_loss"] and i <= cfg["stop_global_rigidity"]:
             loss = (
@@ -213,7 +208,7 @@ def deflicker(
         optimizer_all.zero_grad()
         loss.backward()
         optimizer_all.step()
-        
+
         loss_val = loss.item()
     print()
     print("Reconstructing")
@@ -227,8 +222,8 @@ def deflicker(
         save_img_path = os.path.join(results_folder, "output", "%05d.png" % i)
         save_image(save_img_path, video_frames_reconstruction, i)
 
+
 def save_image(save_img_path, video_frames_reconstruction, i):
-    
     # Ensure the directory exists
     dir_name = os.path.dirname(save_img_path)
     if not os.path.exists(dir_name):
@@ -236,9 +231,9 @@ def save_image(save_img_path, video_frames_reconstruction, i):
 
     # Save the image
     imageio.imwrite(
-        save_img_path,
-        (video_frames_reconstruction[:, :, :, i] * 255).astype(np.uint8)
+        save_img_path, (video_frames_reconstruction[:, :, :, i] * 255).astype(np.uint8)
     )
+
 
 def get_tuples(num_frames, frames):
     # video_frames shape: (resy, resx, 3, num_frames)
@@ -300,10 +295,10 @@ def compute_both_flow(
     frames_dx = torch.zeros((resy, resx, 3, num_frames))
     frames_dy = torch.zeros((resy, resx, 3, num_frames))
 
-    flow_fwds = torch.zeros((resy, resx, 2, num_frames))
-    flow_bwds = torch.zeros((resy, resx, 2, num_frames))
-    mask_fwds = torch.zeros((resy, resx, num_frames))
-    mask_bwds = torch.zeros((resy, resx, num_frames))
+    flow_fwds = torch.zeros((resy, resx, 2, num_frames, 1))
+    flow_bwds = torch.zeros((resy, resx, 2, num_frames, 1))
+    mask_fwds = torch.zeros((resy, resx, num_frames, 1))
+    mask_bwds = torch.zeros((resy, resx, num_frames, 1))
 
     do_resize = resx != img_frs_seq[0].shape[1] or resy != img_frs_seq[0].shape[0]
 
@@ -328,14 +323,16 @@ def compute_both_flow(
             flow_bwd = rafter._compute_flow(im_next, im)
             mask_fwd, mask_bwd = compute_consistency_mask(flow_fwd, flow_bwd)
 
-            flow_fwds[:, :, :, i] = torch.from_numpy(flow_fwd)
-            flow_bwds[:, :, :, i] = torch.from_numpy(flow_bwd)
-            mask_fwds[:, :, i] = mask_fwd
-            mask_bwds[:, :, i] = mask_bwd
+            flow_fwds[:, :, :, i, 0] = torch.from_numpy(flow_fwd)
+            flow_bwds[:, :, :, i, 0] = torch.from_numpy(flow_bwd)
+            mask_fwds[:, :, i, 0] = mask_fwd
+            mask_bwds[:, :, i, 0] = mask_bwd
+        frames_dy[:-1, :, :, i] = frames[1:, :, :, i] - frames[:-1, :, :, i]
+        frames_dx[:, :-1, :, i] = frames[:, 1:, :, i] - frames[:, :-1, :, i]
 
     # Compute frame differences
-    frames_dx = frames[:, 1:, :, :] - frames[:, :-1, :, :]
-    frames_dy = frames[1:, :, :, :] - frames[:-1, :, :, :]
+    # frames_dx = frames[:, 1:, :, :] - frames[:, :-1, :, :]
+    # frames_dy = frames[1:, :, :, :] - frames[:-1, :, :, :]
 
     return frames, frames_dx, frames_dy, flow_fwds, flow_bwds, mask_fwds, mask_bwds
 
@@ -618,6 +615,7 @@ def get_corresponding_flow_matches(
     uv_foreground,
     use_uv=True,
 ):
+    # print(f"{optical_flows.shape=}")
     batch_forward_mask = torch.where(
         optical_flows_mask[
             jif_foreground[1, :].squeeze(),
