@@ -25,7 +25,7 @@ ckpt_local = "J:/AI/Ezsynth/consistency/cvpr2023_deflicker_public_folder/pretrai
 
 rafter = RAFT_flow(model_name=DEFAULT_FLOW_MODEL, arch=DEFAULT_FLOW_ARCH)
 
-iters_num: int = 50
+iters_num: int = 5000
 down_scale: int = 1
 results_folder: str = "output_reconstruct"
 

@@ -33,6 +33,27 @@ def deflicker(
     frames, frames_dx, frames_dy, flow_fwds, flow_bwds, mask_fwds, mask_bwds = (
         compute_both_flow(img_frs_seq, rafter, resx, resy, num_frames)
     )
+    
+    # print(f"{frames.shape=}")
+    # print(f"{frames_dx.shape=}")
+    # print(f"{frames_dy.shape=}")
+    # print(f"{flow_fwds.shape=}")
+    # print(f"{flow_bwds.shape=}")
+    # print(f"{mask_fwds.shape=}")
+    # print(f"{mask_bwds.shape=}")
+    
+    # mask_fwds.shape=torch.Size([540, 960, 2, 1])
+    # frames.shape=torch.Size([540, 960, 3, 2])
+    # mask_bwds.shape=torch.Size([540, 960, 2, 1])
+    # frames_dx.shape=torch.Size([540, 960, 3, 2])
+    # frames_dy.shape=torch.Size([540, 960, 3, 2])
+    # flow_bwds.shape=torch.Size([540, 960, 2, 2, 1])
+    # flow_fwds.shape=torch.Size([540, 960, 2, 2, 1])
+    
+    # print(frames[0].mean())
+    # print(flow_fwds[0].max())
+    # return
+    
 
     model_F_mapping1 = IMLP(
         input_dim=3,
@@ -308,7 +329,7 @@ def compute_both_flow(
             if do_resize
             else img_frs_seq[i]
         )
-        frames[:, :, :, i] = torch.from_numpy(im)
+        frames[:, :, :, i] = torch.from_numpy(im / 255.0)
 
         if i < num_frames - 1:
             im_next = (

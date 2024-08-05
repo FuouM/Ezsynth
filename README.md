@@ -3,7 +3,9 @@
 Reworked version of [Trentonom0r3/Ezsynth](https://github.com/Trentonom0r3/Ezsynth), with masking support and some visual bug fixes. Aims to be easy to use and maintain. 
 
 Perform things like style transfer, color transfer, inpainting, superimposition, video stylization and more!
-This implementation makes use of advanced physics based edge detection and RAFT optical flow, which leads to more accurate results during synthesis.
+This implementation makes use of advanced physics based edge detection, RAFT/EfRAFT/FlowDiffuser optical flow, which leads to more accurate results during synthesis.
+
+Additionally, deep deflickering is provided to improve synthesized results.
 
 :warning: **This is not intended to be used as an installable module.**
 
@@ -120,6 +122,14 @@ https://github.com/user-attachments/assets/7f43630f-c7c9-40d0-8745-58d1f7c84d4f
 Comparison of Optical Flow models
 
 Optical Flow directly affects Flow position warping and Style image warping, controlled by `pos_wgt` and `wrp_wgt` respectively.
+
+3. All-In-One Deflicker - [Blind Video Deflickering by Neural Filtering with a Flawed Atlas](https://github.com/chenyanglei/all-in-one-deflicker) is added
+
+    Download the models here: https://github.com/ChenyangLEI/cvpr2023_deflicker_public_folder/tree/main/pretrained_weights. 
+    ```
+    pretrained_weights/neural_filter.pth
+    pretrained_weights/local_refinement_net.pth
+    ```
 
 **Changes:**
 1. Flow is calculated on a frame by frame basis, with correct time orientation, instead of pre-computing only a forward-flow.
