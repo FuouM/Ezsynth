@@ -16,7 +16,7 @@ def deflicker_refiner(
     stylized: list[np.ndarray],
     video_frames_reconstruction: np.ndarray,
     seed=2023,
-    output_folder = "output_refined"
+    output_folder="output_refined",
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -93,10 +93,9 @@ def tensor2img(img_t: torch.Tensor):
     return img
 
 def save_img(img, filename):
-
     if img.ndim == 3:
-        img = img[:, :, ::-1] ### RGB to BGR
-    
+        img = img[:, :, ::-1]  ### RGB to BGR
+
     ## clip to [0, 1]
     img = np.clip(img, 0, 1)
 
@@ -105,13 +104,18 @@ def save_img(img, filename):
 
     cv2.imwrite(filename, img, [cv2.IMWRITE_PNG_COMPRESSION, 0])
 
+
 def load_videos(stylized: list[np.ndarray], reconstruction: np.ndarray, device):
     # stylized: [540, 960, 3] [0 255]
     # reconstruction: [540, 960, 3, 11] [0 1]
-
-    assert (
-        len(stylized) == reconstruction.shape[-1]
-    ), f"Number of frames mismatch. {len(stylized)=} {reconstruction.shape[-1]=}"
+    if isinstance(reconstruction, np.ndarray):
+        assert (
+            len(stylized) == reconstruction.shape[-1]
+        ), f"Number of frames mismatch. {len(stylized)=} {reconstruction.shape[-1]=}"
+    elif isinstance(reconstruction, list):
+        assert (len(stylized)) == len(
+            reconstruction
+        ), f"Number of frames mismatch. {len(stylized)=} {len(reconstruction)=}"
 
     source_frames: list[torch.Tensor] = []
     atlas_frames: list[torch.Tensor] = []
@@ -120,8 +124,11 @@ def load_videos(stylized: list[np.ndarray], reconstruction: np.ndarray, device):
 
     for i in tqdm.tqdm(range(len(stylized)), desc="Loading videos"):
         src_np = cv2.cvtColor(stylized[i], cv2.COLOR_RGB2BGR) / 255.0
-        recon_np = reconstruction[:, :, :, i]
-        recon_np = cv2.resize(recon_np, (w, h), cv2.INTER_LINEAR)
+        if isinstance(reconstruction, np.ndarray):
+            recon_np = reconstruction[:, :, :, i]
+            recon_np = cv2.resize(recon_np, (w, h), cv2.INTER_LINEAR)
+        elif isinstance(reconstruction, list):
+            recon_np = cv2.cvtColor(reconstruction[i], cv2.COLOR_RGB2BGR) / 255.0
 
         recon_ts = (
             torch.from_numpy(recon_np)

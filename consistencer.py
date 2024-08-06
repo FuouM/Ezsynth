@@ -252,7 +252,7 @@ def deflicker_atlas(
     )
 
     print("Saving")
-    for i in range(num_frames):
+    for i in tqdm.tqdm(range(num_frames), desc="Saving frames"):
         # save image
         save_img_path = os.path.join(results_folder, "output", "%05d.png" % i)
         save_image(save_img_path, video_frames_reconstruction, i)
