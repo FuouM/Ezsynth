@@ -12,8 +12,8 @@ from ezsynth.utils.flow_utils.OpticalFlow import RAFT_flow
 
 
 
-from consistencer import deflicker
-from ezsynth.pickleing import load_from_pickle
+from consistencer import deflicker_atlas
+from ezsynth.pickleing import dump_to_pickle, load_from_pickle
 
 stylized_frames = load_from_pickle("stylized.pkl")
 img_frs_seq = load_from_pickle("img_frs_seq.pkl")
@@ -25,16 +25,18 @@ ckpt_local = "J:/AI/Ezsynth/consistency/cvpr2023_deflicker_public_folder/pretrai
 
 rafter = RAFT_flow(model_name=DEFAULT_FLOW_MODEL, arch=DEFAULT_FLOW_ARCH)
 
-iters_num: int = 5000
+iters_num: int = 2000
 down_scale: int = 1
 results_folder: str = "output_reconstruct"
 
-deflicker(
+video_frames_reconstruction = deflicker_atlas(
     cfg_path,
     checkpoint_path,
-    img_frs_seq,
+    stylized_frames,
     rafter,
     iters_num,
     down_scale,
     results_folder,
 )
+
+dump_to_pickle(video_frames_reconstruction, "video_frames_reconstruction.pkl")

@@ -5,7 +5,7 @@
     "resy": 432,
     "iters_num": 10001,
     "samples_batch": 10000,
-    "optical_flow_coeff": 5.0,
+    "optical_flow_coeff": 500.0,
     "evaluate_every": 10000,
     "derivative_amount": 1,
     "rgb_coeff": 5000,

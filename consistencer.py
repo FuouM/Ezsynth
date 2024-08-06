@@ -11,7 +11,7 @@ from consistency.implicit_neural_networks import IMLP
 from ezsynth.utils.flow_utils.OpticalFlow import RAFT_flow
 
 
-def deflicker(
+def deflicker_atlas(
     cfg_path: str,
     checkpoint_path: str,
     img_frs_seq: list[np.ndarray],
@@ -19,6 +19,7 @@ def deflicker(
     iters_num=10001,
     down_scale=1,
     results_folder="output_reconstruct",
+    early_stopping_thres = 5
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     with open(cfg_path) as f:
@@ -107,6 +108,8 @@ def deflicker(
     jif_all = get_tuples(num_frames, frames)
 
     loss_val = 0.0
+    best_loss = np.inf
+    no_improvement_epochs = 0
     global_rigidity_coeff_fg = cfg["global_rigidity_coeff_fg"]
     # Start training!
     for i in (pbar := tqdm.tqdm(range(start_iteration, iters_num))):
@@ -231,6 +234,17 @@ def deflicker(
         optimizer_all.step()
 
         loss_val = loss.item()
+        
+        if loss_val < best_loss - early_stopping_thres:
+            best_loss = loss_val
+            no_improvement_epochs = 0
+        else:
+            no_improvement_epochs += 1
+
+        if no_improvement_epochs >= 100:
+            print(f'Early stopping at epoch {i+1}')
+            break
+        
     print()
     print("Reconstructing")
     video_frames_reconstruction = reconstruct(
@@ -242,6 +256,8 @@ def deflicker(
         # save image
         save_img_path = os.path.join(results_folder, "output", "%05d.png" % i)
         save_image(save_img_path, video_frames_reconstruction, i)
+    
+    return video_frames_reconstruction
 
 
 def save_image(save_img_path, video_frames_reconstruction, i):
@@ -329,6 +345,7 @@ def compute_both_flow(
             if do_resize
             else img_frs_seq[i]
         )
+        im = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
         frames[:, :, :, i] = torch.from_numpy(im / 255.0)
 
         if i < num_frames - 1:
