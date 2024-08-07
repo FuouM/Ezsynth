@@ -15,11 +15,13 @@ def deflicker_atlas(
     cfg_path: str,
     checkpoint_path: str,
     img_frs_seq: list[np.ndarray],
+    stylized_frames: list[np.ndarray],
     rafter: RAFT_flow,
     iters_num=10001,
     down_scale=1,
     results_folder="output_reconstruct",
-    early_stopping_thres = 5
+    early_stopping_thres=5,
+    do_use_ckpt=False
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     with open(cfg_path) as f:
@@ -32,9 +34,9 @@ def deflicker_atlas(
     larger_dim = np.maximum(resx, resy)
 
     frames, frames_dx, frames_dy, flow_fwds, flow_bwds, mask_fwds, mask_bwds = (
-        compute_both_flow(img_frs_seq, rafter, resx, resy, num_frames)
+        compute_both_flow(img_frs_seq, stylized_frames, rafter, resx, resy, num_frames)
     )
-    
+
     # print(f"{frames.shape=}")
     # print(f"{frames_dx.shape=}")
     # print(f"{frames_dy.shape=}")
@@ -42,7 +44,7 @@ def deflicker_atlas(
     # print(f"{flow_bwds.shape=}")
     # print(f"{mask_fwds.shape=}")
     # print(f"{mask_bwds.shape=}")
-    
+
     # mask_fwds.shape=torch.Size([540, 960, 2, 1])
     # frames.shape=torch.Size([540, 960, 3, 2])
     # mask_bwds.shape=torch.Size([540, 960, 2, 1])
@@ -50,11 +52,10 @@ def deflicker_atlas(
     # frames_dy.shape=torch.Size([540, 960, 3, 2])
     # flow_bwds.shape=torch.Size([540, 960, 2, 2, 1])
     # flow_fwds.shape=torch.Size([540, 960, 2, 2, 1])
-    
+
     # print(frames[0].mean())
     # print(flow_fwds[0].max())
     # return
-    
 
     model_F_mapping1 = IMLP(
         input_dim=3,
@@ -85,22 +86,27 @@ def deflicker_atlas(
     )
 
     start_iteration = 0
-    # init_file = torch.load(checkpoint_path)
-    # model_F_atlas.load_state_dict(init_file["F_atlas_state_dict"])
-    # model_F_mapping1.load_state_dict(init_file["model_F_mapping1_state_dict"])
-    # optimizer_all.load_state_dict(init_file["optimizer_all_state_dict"])
-    # start_iteration = init_file["iteration"]
+    # print()
+    # return
 
-    model_F_mapping1 = pre_train_mapping(
-        model_F_mapping1,
-        num_frames,
-        cfg["uv_mapping_scale"],
-        resx=resx,
-        resy=resy,
-        larger_dim=larger_dim,
-        device=device,
-        pretrain_iters=cfg["pretrain_iter_number"],
-    )
+    if do_use_ckpt and os.path.isfile("cooked.pth"):
+        print("Loading cooked.pth")
+        init_file = torch.load("cooked.pth")
+        model_F_atlas.load_state_dict(init_file["F_atlas_state_dict"])
+        model_F_mapping1.load_state_dict(init_file["model_F_mapping1_state_dict"])
+        optimizer_all.load_state_dict(init_file["optimizer_all_state_dict"])
+    # start_iteration = init_file["iteration"]
+    else:
+        model_F_mapping1 = pre_train_mapping(
+            model_F_mapping1,
+            num_frames,
+            cfg["uv_mapping_scale"],
+            resx=resx,
+            resy=resy,
+            larger_dim=larger_dim,
+            device=device,
+            pretrain_iters=cfg["pretrain_iter_number"],
+        )
 
     model_F_atlas.train()
     model_F_mapping1.train()
@@ -110,47 +116,61 @@ def deflicker_atlas(
     loss_val = 0.0
     best_loss = np.inf
     no_improvement_epochs = 0
+
+    memo_jif_frames = {}
+    memo_jif_xty = {}
+    memo_jif_gradient = {}
+    memo_jif_rigid = {}
+    memo_jif_flow_match_forward = {}
+    memo_jif_flow_match_backward = {}
+
+    # direct set alpha to one
+    alpha = torch.ones(cfg["samples_batch"], 1).to(device)
+
     global_rigidity_coeff_fg = cfg["global_rigidity_coeff_fg"]
     # Start training!
     for i in (pbar := tqdm.tqdm(range(start_iteration, iters_num))):
         pbar.set_description(f"Training reconstruct model. Last loss: {loss_val:.3f}")
         if i > cfg["stop_global_rigidity"]:
             global_rigidity_coeff_fg = 0
-            
+
         # randomly choose indices for the current batch
         inds_foreground = torch.randint(
             jif_all.shape[1], (np.int64(cfg["samples_batch"] * 1.0), 1)
         )
 
         jif_current = jif_all[:, inds_foreground]  # size (3, batch, 1)
+        jif_current_tup = tuple(jif_current)
 
-        rgb_current = (
-            frames[jif_current[1, :], jif_current[0, :], :, jif_current[2, :]]
-            .squeeze(1)
-            .to(device)
-        )
+        if jif_current_tup not in memo_jif_frames:
+            rgb_current = (
+                frames[jif_current[1, :], jif_current[0, :], :, jif_current[2, :]]
+                .squeeze(1)
+                .to(device)
+            )
 
-        # normalize coordinates to be in [-1,1]
-        xyt_current = torch.cat(
-            (
-                jif_current[0, :] / (larger_dim / 2) - 1,
-                jif_current[1, :] / (larger_dim / 2) - 1,
-                jif_current[2, :] / (num_frames / 2.0) - 1,
-            ),
-            dim=1,
-        ).to(device)  # size (batch, 3)
+            # normalize coordinates to be in [-1,1]
+            xyt_current = torch.cat(
+                (
+                    jif_current[0, :] / (larger_dim / 2) - 1,
+                    jif_current[1, :] / (larger_dim / 2) - 1,
+                    jif_current[2, :] / (num_frames / 2.0) - 1,
+                ),
+                dim=1,
+            ).to(device)  # size (batch, 3)
+
+            memo_jif_frames[jif_current_tup] = rgb_current
+            memo_jif_xty[jif_current_tup] = xyt_current
+        else:
+            rgb_current = memo_jif_frames[jif_current_tup]
+            xyt_current = memo_jif_xty[jif_current_tup]
 
         # get the atlas UV coordinates from the two mapping networks;
         uv_foreground1 = model_F_mapping1(xyt_current)
 
-        # direct set alpha to one
-        alpha = torch.ones(cfg["samples_batch"], 1).to(device)
-
         # Sample atlas values. Foreground colors are sampled from [0,1]x[0,1] and background colors are sampled from [-1,0]x[-1,0]
         # Note that the original [u,v] coorinates are in [-1,1]x[-1,1] for both networks
-        rgb_output1 = (model_F_atlas(uv_foreground1 * 0.5 + 0.5) + 1.0) * 0.5
-        # Reconstruct final colors from the two layers (using alpha)
-        rgb_output_foreground = rgb_output1
+        rgb_output_foreground = (model_F_atlas(uv_foreground1 * 0.5 + 0.5) + 1.0) * 0.5
 
         if cfg["use_gradient_loss"]:
             gradient_loss = get_gradient_loss_single(
@@ -163,14 +183,13 @@ def deflicker_atlas(
                 device,
                 resx,
                 num_frames,
+                memo_jif_gradient,
+                jif_current_tup,
             )
         else:
             gradient_loss = 0.0
 
-        # gradient_loss = 0.0
-
         rgb_loss = (torch.norm(rgb_output_foreground - rgb_current, dim=1) ** 2).mean()
-        # print(f"{rgb_loss=}")
 
         rigidity_loss1 = get_rigidity_loss(
             jif_current,
@@ -180,6 +199,8 @@ def deflicker_atlas(
             model_F_mapping1,
             uv_foreground1,
             device,
+            memo_jif_rigid,
+            jif_current_tup,
             uv_mapping_scale=cfg["uv_mapping_scale"],
         )
 
@@ -192,6 +213,8 @@ def deflicker_atlas(
                 model_F_mapping1,
                 uv_foreground1,
                 device,
+                memo_jif_rigid,
+                jif_current_tup,
                 uv_mapping_scale=cfg["uv_mapping_scale"],
             )
 
@@ -207,11 +230,12 @@ def deflicker_atlas(
             mask_fwds,
             cfg["uv_mapping_scale"],
             device,
+            memo_jif_flow_match_forward,
+            memo_jif_flow_match_backward,
+            jif_current_tup,
             use_alpha=True,
             alpha=alpha,
         )
-
-        # flow_loss1 = 0
 
         if cfg["include_global_rigidity_loss"] and i <= cfg["stop_global_rigidity"]:
             loss = (
@@ -234,17 +258,27 @@ def deflicker_atlas(
         optimizer_all.step()
 
         loss_val = loss.item()
-        
-        if loss_val < best_loss - early_stopping_thres:
-            best_loss = loss_val
-            no_improvement_epochs = 0
-        else:
-            no_improvement_epochs += 1
 
-        if no_improvement_epochs >= 100:
-            print(f'Early stopping at epoch {i+1}')
-            break
-        
+        # if loss_val < best_loss - early_stopping_thres:
+        #     best_loss = loss_val
+        #     no_improvement_epochs = 0
+        # else:
+        #     no_improvement_epochs += 1
+
+        # if no_improvement_epochs >= 100:
+        #     print(f"Early stopping at epoch {i+1}")
+        #     break
+
+    torch.save(
+        {
+            "F_atlas_state_dict": model_F_atlas.state_dict(),
+            "iteration": iters_num,
+            "model_F_mapping1_state_dict": model_F_mapping1.state_dict(),
+            "optimizer_all_state_dict": optimizer_all.state_dict(),
+        },
+        "cooked.pth",
+    )
+    
     print()
     print("Reconstructing")
     video_frames_reconstruction = reconstruct(
@@ -256,7 +290,7 @@ def deflicker_atlas(
         # save image
         save_img_path = os.path.join(results_folder, "output", "%05d.png" % i)
         save_image(save_img_path, video_frames_reconstruction, i)
-    
+
     return video_frames_reconstruction
 
 
@@ -287,13 +321,11 @@ def reconstruct(
 ):
     video_frames_reconstruction = np.zeros((resy, resx, 3, num_frames))
 
+    relis_i, reljs_i = torch.where(torch.ones(resy, resx) > 0)
+    # split the coordinates of the entire image such that no more than 100k coordinates in each batch
+    relisa = np.array_split(relis_i.numpy(), np.ceil(relis_i.shape[0] / 100000))
+    reljsa = np.array_split(reljs_i.numpy(), np.ceil(relis_i.shape[0] / 100000))
     for f in tqdm.tqdm(range(num_frames), desc="Reconstructing"):
-        relis_i, reljs_i = torch.where(torch.ones(resy, resx) > 0)
-
-        # split the coordinates of the entire image such that no more than 100k coordinates in each batch
-        relisa = np.array_split(relis_i.numpy(), np.ceil(relis_i.shape[0] / 100000))
-        reljsa = np.array_split(reljs_i.numpy(), np.ceil(relis_i.shape[0] / 100000))
-
         for i in range(len(relisa)):
             relis = torch.from_numpy(relisa[i]).unsqueeze(1) / (larger_dim / 2) - 1
             reljs = torch.from_numpy(reljsa[i]).unsqueeze(1) / (larger_dim / 2) - 1
@@ -323,6 +355,7 @@ def reconstruct(
 
 def compute_both_flow(
     img_frs_seq: list[np.ndarray],
+    stylized_frames: list[np.ndarray],
     rafter: RAFT_flow,
     resx: int,
     resy: int,
@@ -345,8 +378,15 @@ def compute_both_flow(
             if do_resize
             else img_frs_seq[i]
         )
+        im_style = (
+            cv2.resize(stylized_frames[i], (resx, resy), interpolation=cv2.INTER_LINEAR)
+            if do_resize
+            else stylized_frames[i]
+        )
         im = cv2.cvtColor(im, cv2.COLOR_RGB2BGR)
-        frames[:, :, :, i] = torch.from_numpy(im / 255.0)
+        frames[:, :, :, i] = torch.from_numpy(
+            cv2.cvtColor(im_style, cv2.COLOR_RGB2BGR) / 255.0
+        )
 
         if i < num_frames - 1:
             im_next = (
@@ -365,12 +405,10 @@ def compute_both_flow(
             flow_bwds[:, :, :, i, 0] = torch.from_numpy(flow_bwd)
             mask_fwds[:, :, i, 0] = mask_fwd
             mask_bwds[:, :, i, 0] = mask_bwd
+
+        # Compute frame differences
         frames_dy[:-1, :, :, i] = frames[1:, :, :, i] - frames[:-1, :, :, i]
         frames_dx[:, :-1, :, i] = frames[:, 1:, :, i] - frames[:, :-1, :, i]
-
-    # Compute frame differences
-    # frames_dx = frames[:, 1:, :, :] - frames[:, :-1, :, :]
-    # frames_dy = frames[1:, :, :, :] - frames[:-1, :, :, :]
 
     return frames, frames_dx, frames_dy, flow_fwds, flow_bwds, mask_fwds, mask_bwds
 
@@ -415,37 +453,52 @@ def get_gradient_loss_single(
     rgb_output_foreground,
     device,
     resx,
-    number_of_frames,
+    num_frames,
+    memo_jif_gradient: dict,
+    jif_current_tup: tuple,
 ):
-    xplus1yt_foreground = torch.cat(
-        (
-            (jif_current[0, :] + 1) / (resx / 2) - 1,
-            jif_current[1, :] / (resx / 2) - 1,
-            jif_current[2, :] / (number_of_frames / 2.0) - 1,
-        ),
-        dim=1,
-    ).to(device)
+    if jif_current_tup not in memo_jif_gradient:
+        xplus1yt_foreground = torch.cat(
+            (
+                (jif_current[0, :] + 1) / (resx / 2) - 1,
+                jif_current[1, :] / (resx / 2) - 1,
+                jif_current[2, :] / (num_frames / 2.0) - 1,
+            ),
+            dim=1,
+        ).to(device)
 
-    xyplus1t_foreground = torch.cat(
-        (
-            (jif_current[0, :]) / (resx / 2) - 1,
-            (jif_current[1, :] + 1) / (resx / 2) - 1,
-            jif_current[2, :] / (number_of_frames / 2.0) - 1,
-        ),
-        dim=1,
-    ).to(device)
+        xyplus1t_foreground = torch.cat(
+            (
+                (jif_current[0, :]) / (resx / 2) - 1,
+                (jif_current[1, :] + 1) / (resx / 2) - 1,
+                jif_current[2, :] / (num_frames / 2.0) - 1,
+            ),
+            dim=1,
+        ).to(device)
 
-    # precomputed discrete derivative with respect to x,y direction
-    rgb_dx_gt = (
-        video_frames_dx[jif_current[1, :], jif_current[0, :], :, jif_current[2, :]]
-        .squeeze(1)
-        .to(device)
-    )
-    rgb_dy_gt = (
-        video_frames_dy[jif_current[1, :], jif_current[0, :], :, jif_current[2, :]]
-        .squeeze(1)
-        .to(device)
-    )
+        # precomputed discrete derivative with respect to x,y direction
+        rgb_dx_gt = (
+            video_frames_dx[jif_current[1, :], jif_current[0, :], :, jif_current[2, :]]
+            .squeeze(1)
+            .to(device)
+        )
+
+        rgb_dy_gt = (
+            video_frames_dy[jif_current[1, :], jif_current[0, :], :, jif_current[2, :]]
+            .squeeze(1)
+            .to(device)
+        )
+
+        memo_jif_gradient[jif_current_tup] = (
+            xplus1yt_foreground,
+            xyplus1t_foreground,
+            rgb_dx_gt,
+            rgb_dy_gt,
+        )
+    else:
+        xplus1yt_foreground, xyplus1t_foreground, rgb_dx_gt, rgb_dy_gt = (
+            memo_jif_gradient[jif_current_tup]
+        )
 
     # uv coordinates for locations with offsets of 1 pixel
     uv_foreground1_xyplus1t = model_F_mapping1(xyplus1t_foreground)
@@ -466,6 +519,7 @@ def get_gradient_loss_single(
     # Use reconstructed RGB values for computing derivatives:
     rgb_dx_output = rgb_output_foreground_xplus1yt - rgb_output_foreground
     rgb_dy_output = rgb_output_foreground_xyplus1t - rgb_output_foreground
+
     gradient_loss = torch.mean(
         (rgb_dx_gt - rgb_dx_output).norm(dim=1) ** 2
         + (rgb_dy_gt - rgb_dy_output).norm(dim=1) ** 2
@@ -482,10 +536,13 @@ def get_rigidity_loss(
     model_F_mapping,
     uv_foreground,
     device,
+    memo_jif_rigid,
+    jif_current_tup,
     uv_mapping_scale=1.0,
     return_all=False,
 ):
-    # concatenating (x,y-derivative_amount,t) and (x-derivative_amount,y,t) to get xyt_p:
+    # if jif_current_tup not in memo_jif_rigid:
+        # concatenating (x,y-derivative_amount,t) and (x-derivative_amount,y,t) to get xyt_p:
     is_patch = (
         torch.cat((jif_foreground[1, :] - derivative_amount, jif_foreground[1, :]))
         / (resx / 2)
@@ -502,21 +559,26 @@ def get_rigidity_loss(
         - 1
     )
     xyt_p = torch.cat((js_patch, is_patch, fs_patch), dim=1).to(device)
+        # memo_jif_rigid[jif_current_tup] = xyt_p
+    # else:
+        # print("\nrigid hit")
+    # xyt_p = memo_jif_rigid[jif_current_tup]
 
     uv_p = model_F_mapping(xyt_p)
-    u_p = uv_p[:, 0].view(
-        2, -1
-    )  # u_p[0,:]= u(x,y-derivative_amount,t).  u_p[1,:]= u(x-derivative_amount,y,t)
-    v_p = uv_p[:, 1].view(
-        2, -1
-    )  # v_p[0,:]= u(x,y-derivative_amount,t).  v_p[1,:]= v(x-derivative_amount,y,t)
 
-    u_p_d_ = (
-        uv_foreground[:, 0].unsqueeze(0) - u_p
-    )  # u_p_d_[0,:]=u(x,y,t)-u(x,y-derivative_amount,t)   u_p_d_[1,:]= u(x,y,t)-u(x-derivative_amount,y,t).
-    v_p_d_ = (
-        uv_foreground[:, 1].unsqueeze(0) - v_p
-    )  # v_p_d_[0,:]=u(x,y,t)-v(x,y-derivative_amount,t).  v_p_d_[1,:]= u(x,y,t)-v(x-derivative_amount,y,t).
+    u_p = uv_p[:, 0].view(2, -1)
+    # u_p[0,:]= u(x,y-derivative_amount,t).  u_p[1,:]= u(x-derivative_amount,y,t)
+
+    v_p = uv_p[:, 1].view(2, -1)
+    # v_p[0,:]= u(x,y-derivative_amount,t).  v_p[1,:]= v(x-derivative_amount,y,t)
+
+    u_p_d_ = uv_foreground[:, 0].unsqueeze(0) - u_p
+    # u_p_d_[0,:]=u(x,y,t)-u(x,y-derivative_amount,t)
+    # u_p_d_[1,:]= u(x,y,t)-u(x-derivative_amount,y,t).
+
+    v_p_d_ = uv_foreground[:, 1].unsqueeze(0) - v_p
+    # v_p_d_[0,:]=u(x,y,t)-v(x,y-derivative_amount,t).
+    # v_p_d_[1,:]= u(x,y,t)-v(x-derivative_amount,y,t).
 
     # to match units: 1 in uv coordinates is resx/2 in image space.
     du_dx = u_p_d_[1, :] * resx / 2
@@ -577,6 +639,9 @@ def get_optical_flow_loss(
     optical_flows_mask,
     uv_mapping_scale,
     device,
+    memo_jif_flow_match_forward,
+    memo_jif_flow_match_backward,
+    jif_current_tup,
     use_alpha=False,
     alpha=1.0,
 ):
@@ -593,6 +658,8 @@ def get_optical_flow_loss(
         number_of_frames,
         True,
         uv_foreground,
+        memo_jif_flow_match_forward,
+        jif_current_tup,
     )
     uv_foreground_forward_should_match = model_F_mapping(
         xyt_foreground_forward_should_match.to(device)
@@ -618,6 +685,8 @@ def get_optical_flow_loss(
         number_of_frames,
         False,
         uv_foreground,
+        memo_jif_flow_match_backward,
+        jif_current_tup,
     )
     uv_foreground_backward_should_match = model_F_mapping(
         xyt_foreground_backward_should_match.to(device)
@@ -630,14 +699,14 @@ def get_optical_flow_loss(
         / (2 * uv_mapping_scale)
     )
 
-    if use_alpha:
-        flow_loss = (
-            loss_flow_prev * alpha[relevant_batch_indices_backward].squeeze()
-        ).mean() * 0.5 + (
-            loss_flow_next * alpha[relevant_batch_indices_forward].squeeze()
-        ).mean() * 0.5
-    else:
-        flow_loss = (loss_flow_prev).mean() * 0.5 + (loss_flow_next).mean() * 0.5
+    # if use_alpha:
+    #     flow_loss = (
+    #         loss_flow_prev * alpha[relevant_batch_indices_backward].squeeze()
+    #     ).mean() * 0.5 + (
+    #         loss_flow_next * alpha[relevant_batch_indices_forward].squeeze()
+    #     ).mean() * 0.5
+    # else:
+    flow_loss = (loss_flow_prev).mean() * 0.5 + (loss_flow_next).mean() * 0.5
 
     return flow_loss
 
@@ -651,9 +720,12 @@ def get_corresponding_flow_matches(
     number_of_frames,
     is_forward,
     uv_foreground,
+    memo_jif_flow_match,
+    jif_current_tup,
     use_uv=True,
 ):
     # print(f"{optical_flows.shape=}")
+    # if jif_current_tup not in memo_jif_flow_match:
     batch_forward_mask = torch.where(
         optical_flows_mask[
             jif_foreground[1, :].squeeze(),
@@ -697,15 +769,28 @@ def get_corresponding_flow_matches(
             jif_foreground_forward_should_match[2] / (number_of_frames / 2) - 1,
         )
     ).T
-    if use_uv:
-        uv_foreground_forward_relevant = uv_foreground[batch_forward_mask[0]]
-        return (
-            uv_foreground_forward_relevant,
-            xyt_foreground_forward_should_match,
-            relevant_batch_indices,
-        )
-    else:
-        return xyt_foreground_forward_should_match, relevant_batch_indices
+    # if use_uv:
+    uv_foreground_forward_relevant = uv_foreground[batch_forward_mask[0]]
+
+        # memo_jif_flow_match[jif_current_tup] = (
+        #     uv_foreground_forward_relevant,
+        #     xyt_foreground_forward_should_match,
+        #     relevant_batch_indices,
+        # )
+    # else:
+    #     # print("\flow hit")
+    #     (
+    #         uv_foreground_forward_relevant,
+    #         xyt_foreground_forward_should_match,
+    #         relevant_batch_indices,
+    #     ) = memo_jif_flow_match[jif_current_tup]
+    return (
+        uv_foreground_forward_relevant,
+        xyt_foreground_forward_should_match,
+        relevant_batch_indices,
+    )
+    # else:
+    #     return xyt_foreground_forward_should_match, relevant_batch_indices
 
 
 # See explanation in the paper, appendix A (Second paragraph)

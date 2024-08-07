@@ -17,6 +17,7 @@ def deflicker_refiner(
     video_frames_reconstruction: np.ndarray,
     seed=2023,
     output_folder="output_refined",
+    output_folder_concat="output_refined_concat"
 ):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -79,9 +80,12 @@ def deflicker_refiner(
                 tensor2img(frame_pred),
             )
             
-            # frame_concat = np.concatenate([frame_content, frame_style, frame_pred], axis=1)
-            frames_preds.append(frame_pred)
-            save_img(frame_pred, f"{output_folder}/{id:05d}.png")
+            frame_o2_np = tensor2img(frame_o2)
+            
+            frame_concat = np.concatenate([frame_style, frame_pred], axis=1)
+            frames_preds.append(frame_o2_np)
+            save_img(frame_o2_np, f"{output_folder}/{id:05d}.png")
+            save_img(frame_concat, f"{output_folder_concat}/{id:05d}.png")
 
     return frames_preds
 
