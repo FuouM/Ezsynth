@@ -1,5 +1,7 @@
 # Ezsynth - Ebsynth Python Library
 
+Version 2 is in development! <https://github.com/FuouM/ReEzSynth>
+
 Reworked version of [Trentonom0r3/Ezsynth](https://github.com/Trentonom0r3/Ezsynth), with masking support and some visual bug fixes. Aims to be easy to use and maintain. 
 
 Perform things like style transfer, color transfer, inpainting, superimposition, video stylization and more!
